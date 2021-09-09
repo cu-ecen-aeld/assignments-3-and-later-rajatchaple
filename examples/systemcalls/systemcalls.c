@@ -1,5 +1,9 @@
 #include "systemcalls.h"
-
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 /**
  * @param cmd the command to execute with system()
  * @return true if the commands in ... with arguments @param arguments were executed 
@@ -10,14 +14,20 @@
 bool do_system(const char *cmd)
 {
 
+  if (system(cmd) != 0)
+  {
+    return false;  
+  }
+
+  return true;
+
 /*
  * TODO  add your code here
- *  Call the system() function with the command set in the dmd
+ *  Call the system() function with the command set in the cmd
  *   and return a boolean true if the system() call completed with success 
  *   or false() if it returned a failure
 */
-
-    return true;
+   
 }
 
 /**
@@ -33,21 +43,73 @@ bool do_system(const char *cmd)
 *   fork, waitpid, or execv() command, or if a non-zero return value was returned
 *   by the command issued in @param arguments with the specified arguments.
 */
-
+//int execv(const char *path, char *const argv[]);
 bool do_exec(int count, ...)
 {
     va_list args;
     va_start(args, count);
-    char * command[count+1];
-    int i;
-    for(i=0; i<count; i++)
+    char *command[count+1];
+
+    //memset(command, 0, count);
+    
+    printf("\n\n************************************************");
+    printf("size of command : %lu , %d", sizeof(command), count);
+
+    
+
+    for(int i=0; i<count; i++)
     {
         command[i] = va_arg(args, char *);
+        printf("\ncommand[%d] :%s", i, command[i]);
     }
+    
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
+    pid_t process_id;
+    int status;
+
+    process_id = fork();
+    if(process_id == -1)
+    {
+        printf("\nfork failed");
+        return false;
+    }
+
+    // int ret_exec = -1;
+    if (process_id == 0) {
+        printf("\nExecutiing execv : ");
+        for(int i=0; i<count; i++)
+        {
+            printf("%s ", command[i]);
+        } 
+        printf("\n");
+        execv(command[0], &command[1]); 
+         exit(-1);
+    }
+
+
+    // if(ret_exec == -1)
+    // {
+    //     printf("\nexec failed");
+    //     return false;
+    // }
+    printf("\nExec done--------------------after");
+
+
+    
+    if(waitpid(process_id, &status, 0) == -1)
+    {
+        printf("\nwait failed");
+        return false;
+    }
+    else
+    {
+        printf("\nwait succeeded");
+    }
+
+    printf("\n============================%d=================================\n",status);
+    if(status != 0)
+        return false;
+
 
 /*
  * TODO:
