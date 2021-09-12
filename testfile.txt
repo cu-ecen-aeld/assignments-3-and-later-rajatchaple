@@ -1,1 +1,1 @@
-home is /home/rajat
+home is $HOME
