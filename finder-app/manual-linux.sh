@@ -65,8 +65,6 @@ mkdir bin dev etc home lib proc sbin sys tmp usr var
 mkdir usr/bin usr/sbin usr/lib
 mkdir -p var/log
 
-tree -d
-
 cd "$OUTDIR"
 if [ ! -d "${OUTDIR}/busybox" ]
 then
