@@ -13,7 +13,8 @@ FINDER_APP_DIR=$(realpath $(dirname $0))
 ARCH=arm64
 CROSS_COMPILE=aarch64-none-linux-gnu-
 
-SHELLPATH=$(realpath $(dirname "$0")) 
+SHELLPATH=$(realpath $(dirname "$0"))
+
 
 if [ $# -lt 1 ]
 then
@@ -24,49 +25,61 @@ else
 fi
 
 mkdir -p ${OUTDIR}
+OUTPATH=$(realpath $OUTDIR)
 
-cd "$OUTDIR"
-if [ ! -d "${OUTDIR}/linux-stable" ]; then
+echo "*********************************************************************************************"
+echo $OUTPATH
+# mkdir -p ${OUTPATH}
+
+
+cd "$OUTPATH"
+
+
+if [ ! -d "${OUTPATH}/linux-stable" ]; then
     #Clone only if the repository does not exist.
-	echo "CLONING GIT LINUX STABLE VERSION ${KERNEL_VERSION} IN ${OUTDIR}"
+	echo "CLONING GIT LINUX STABLE VERSION ${KERNEL_VERSION} IN ${OUTPATH}"
 	git clone ${KERNEL_REPO} --depth 1 --single-branch --branch ${KERNEL_VERSION}
 fi
-if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
+if [ ! -e ${OUTPATH}/linux-stable/arch/${ARCH}/boot/Image ]; then
     cd linux-stable
     echo "Checking out version ${KERNEL_VERSION}"
     git checkout ${KERNEL_VERSION}
 
     # TODO: Add your kernel build steps here
     make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} mrproper
-    #make ARCH=${ARCH} menuconfig
+                            #make ARCH=${ARCH} menuconfig
     make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} defconfig
     make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} all 
     make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} modules
     make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} dtbs
 fi 
 
-echo "Adding the Image in outdir"
+echo "Adding the Image in OUTPATH"
 
 echo "Creating the staging directory for the root filesystem"
-cd "$OUTDIR"
-if [ -d "${OUTDIR}/rootfs" ]
+echo "*********************************************************************************************"
+echo $(pwd)
+cd "$OUTPATH"
+if [ -d "${OUTPATH}/rootfs" ]
 then
-	echo "Deleting rootfs directory at ${OUTDIR}/rootfs and starting over"
-    sudo rm  -rf ${OUTDIR}/rootfs
+	echo "Deleting rootfs directory at ${OUTPATH}/rootfs and starting over"
+    sudo rm  -rf ${OUTPATH}/rootfs
 fi
-#creating necessary base directory
 
-mkdir ${OUTDIR}/rootfs
-cd ${OUTDIR}/rootfs
-cp ${OUTDIR}/linux-stable/arch/arm64/boot/Image ${OUTDIR}
+#creating necessary base directory
+mkdir ${OUTPATH}/rootfs
+cd ${OUTPATH}/rootfs
+cp ${OUTPATH}/linux-stable/arch/arm64/boot/Image ${OUTPATH}
 
 
 mkdir bin dev etc home lib proc sbin sys tmp usr var
 mkdir usr/bin usr/sbin usr/lib
 mkdir -p var/log
 
-cd "$OUTDIR"
-if [ ! -d "${OUTDIR}/busybox" ]
+echo "*********************************************************************************************"
+echo $(pwd)
+cd "$OUTPATH"
+if [ ! -d "${OUTPATH}/busybox" ]
 then
 git clone git://busybox.net/busybox.git
     cd busybox
@@ -81,9 +94,9 @@ fi
 
 # TODO: Make and insatll busybox
 echo "installing busybox"
-make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} CONFIG_PREFIX=${OUTDIR}/rootfs install
+make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} CONFIG_PREFIX=${OUTPATH}/rootfs install
 
-cd ${OUTDIR}/rootfs
+cd ${OUTPATH}/rootfs
 
 echo "Library dependencies"
 ${CROSS_COMPILE}readelf -a bin/busybox | grep "program interpreter"
@@ -112,16 +125,18 @@ cd $SHELLPATH && make CROSS_COMPILE=${CROSS_COMPILE}
 echo "Copying finder related scripts and executables in /home directory"
 # TODO: Copy the finder related scripts and executables to the /home directory
 # on the target rootfs
-cp ./writer ${OUTDIR}/rootfs/home
-cp ./finder.sh ${OUTDIR}/rootfs/home
-cp ./finder-test.sh ${OUTDIR}/rootfs/home
-cp ./autorun-qemu.sh ${OUTDIR}/rootfs/home
-cp -r ./conf/ ${OUTDIR}/rootfs/home
+cp ./writer ${OUTPATH}/rootfs/home
+cp ./finder.sh ${OUTPATH}/rootfs/home
+cp ./finder-test.sh ${OUTPATH}/rootfs/home
+cp ./autorun-qemu.sh ${OUTPATH}/rootfs/home
+cp -r ./conf/ ${OUTPATH}/rootfs/home
 
  
 
 # TODO: Chown the root directory
-cd ${OUTDIR}/rootfs
+echo "*********************************************************************************************"
+echo $(pwd)
+cd ${OUTPATH}/rootfs
 sudo chown -R root:root *
 
 echo "creating initramfs"
