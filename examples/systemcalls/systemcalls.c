@@ -1,4 +1,11 @@
 #include "systemcalls.h"
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -17,7 +24,16 @@ bool do_system(const char *cmd)
  *   or false() if it returned a failure
 */
 
-    return true;
+  printf("\n\ndo_system: ************************************************\n");
+  if (system(cmd) != 0)
+  {
+    return false;  
+  }
+
+  return true;
+
+
+   
 }
 
 /**
@@ -33,22 +49,11 @@ bool do_system(const char *cmd)
 *   fork, waitpid, or execv() command, or if a non-zero return value was returned
 *   by the command issued in @param arguments with the specified arguments.
 */
-
 bool do_exec(int count, ...)
 {
     va_list args;
     va_start(args, count);
-    char * command[count+1];
-    int i;
-    for(i=0; i<count; i++)
-    {
-        command[i] = va_arg(args, char *);
-    }
-    command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
+    char *command[count+1];
 /*
  * TODO:
  *   Execute a system command by calling fork, execv(),
@@ -59,6 +64,65 @@ bool do_exec(int count, ...)
  *   
 */
 
+    printf("\n\ndo_exec: ************************************************");
+    printf("\nProcess id of current process in %d", getpid());
+   
+
+    for(int i=0; i<count; i++)
+    {
+        command[i] = va_arg(args, char *);
+        //printf("\ncommand[%d] :%s", i, command[i]);
+    }
+    
+    command[count] = NULL;
+    pid_t process_id;
+    int status;
+
+    /*******************fork********************/
+    process_id = fork();
+
+    if(process_id == -1)
+    {
+        printf("\nfork failed");
+        return false;
+    }
+    
+
+    /*******************Execv()********************/
+    else if (process_id == 0) {
+        printf("\nExecutiing execv : ");
+        for(int i=0; i<count; i++)
+        {
+            printf("%s ", command[i]);
+        } 
+        printf("\n");
+        execv(command[0], command); 
+        
+         exit(-1);
+    }
+
+    
+    if (waitpid(process_id, &status, 0) == -1) //returns -1 in case of error
+    {
+        printf("\nwait failed\n");
+        return false;
+    }
+    else 
+    {
+        if (WIFEXITED(status) == true)    //returns true if child exited normally
+        {
+            printf("\nChild process terminated normally with exit status %d\n", WEXITSTATUS (status));
+            // return WEXITSTATUS (status);
+            if(WEXITSTATUS(status) != 0)
+                return false;
+            else
+                return true;
+        }
+    }
+
+    
+
+    
     va_end(args);
 
     return true;
@@ -74,24 +138,72 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     va_list args;
     va_start(args, count);
     char * command[count+1];
+    int status;
     int i;
+    int ret_dup;
+    pid_t process_id;
+
+    int fd = creat(outputfile, 0644);
+
+    printf("\n\ndo_exec_redirect: ************************************************");
+    printf("\nProcess id of current process in %d", getpid());
+
     for(i=0; i<count; i++)
     {
         command[i] = va_arg(args, char *);
+        //printf("\ncommand[%d] :%s", i, command[i]);
     }
+
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
+
+    /*******************fork********************/
+    process_id = fork();
+    if(process_id == -1)
+    {
+        printf("\nfork failed");
+        return false;
+    }
+    
+
+    /*******************Execv********************/
+    else if (process_id == 0) {
+        printf("\nExecutiing execv : ");
+        for(int i=0; i<count; i++)
+        {
+            printf("%s ", command[i]);
+        } 
+        printf("\n");
+
+        ret_dup = dup2(fd, STDOUT_FILENO);
+        if(ret_dup == -1)
+            return false;
+
+        execv(command[0], command); 
+
+        exit(-1);
+    }
+    
+        
 
 
-/*
- * TODO
- *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
- *   redirect standard out to a file specified by outputfile.
- *   The rest of the behaviour is same as do_exec()
- *   
-*/
+    /********************Wait*********************/
+
+    if (waitpid(process_id, &status, 0) == -1) //returns -1 in case of error
+    {
+        printf("\nwait failed\n");
+        return false;
+    }
+    else 
+    {
+        if (WIFEXITED(status) == true)    //returns true if child exited normally
+        {
+            printf("\nChild process terminated normally with exit status %d\n", WEXITSTATUS (status));
+            if(WEXITSTATUS(status) != 0)
+                return false;
+            else
+                return true;
+        }
+    }
 
     va_end(args);
     
