@@ -28,16 +28,21 @@
 #include <fcntl.h>
 #include <stdbool.h>
 #include <signal.h>
+#include <errno.h>
 
 /***************Includes***************/
 #define BUF_SIZE 256
 #define PORT 9000
 #define FILE "/var/tmp/aesdsocketdata"
 
-#define SYSLOG   //uncomment this to print data using printf
+#define NO_DEBUG
+
 #ifdef SYSLOG
 #define LOG_DBG(...) syslog(LOG_DEBUG, __VA_ARGS__)
 #define LOG_ERROR(...) syslog(LOG_ERR, __VA_ARGS__)
+#elif defined(NO_DEBUG)
+#define LOG_DBG(...)
+#define LOG_ERROR(...)
 #else
 #define LOG_DBG(...) printf(__VA_ARGS__)
 #define LOG_ERROR(...) printf(__VA_ARGS__)
@@ -56,61 +61,65 @@ enum socket_states
     STATE_WRITING_FILE,
     STATE_READING_FILE,
     STATE_SEND_TO_CLIENT,
-    EXIT
+    STATE_EXIT
 } server_socket_state = STATE_OPENING_SOCKET;
 
 int sockfd_server;
 int sockfd_client;
-int fd;  
+int fd;
 int status;
+bool signal_exit_request = false;
 
 /******************************************************************************
  * Signal handler
  * ****************************************************************************/
-void signal_handler() {
+void signal_handler(int signo)
+{
+    if (signo == SIGINT || signo == SIGTERM)
+    {
+        printf("\nCaught Signal, exiting\n");
+        syslog(LOG_DEBUG, "Caught Signal, exiting\n");
+    }
 
-	close(fd);
-	close(sockfd_server);
-	closelog();
+    if (shutdown(sockfd_server, SHUT_RDWR))
+    {
+        perror("Failed on shutdown()");
+        syslog(LOG_ERR, "Could not close socket file descriptor in signal handler : %s", strerror(errno));
+    }
 
+    signal_exit_request = true;
     syslog(LOG_INFO, "Caught Signal, exiting");
-
-    status = remove(FILE);
-	if(status < 0) {
-		perror("Could not delete file");
-		exit(-1);
-	}
-	
-	exit(0);
 }
-
-
 
 /******************************************************************************
  * Application entry point function 
  * ****************************************************************************/
 int main(int argc, char *argv[])
 {
-    openlog("aesdsocket", 0, LOG_USER);  //setting up explicitly LOG_USER facility (usually its default set to user)
-    pid_t pid;  
-    int nread, nwrite, nsent, nreceived;
+    openlog("aesdsocket", 0, LOG_USER); //setting up explicitly LOG_USER facility (usually its default set to user)
+    pid_t pid;
+    long nread, nwrite, nsent, nreceived;
     struct sockaddr_in server_addr, new_addr;
-    struct sockaddr_in * pV4Addr = (struct sockaddr_in*)&new_addr;
+    struct sockaddr_in *pV4Addr = (struct sockaddr_in *)&new_addr;
     struct in_addr client_addr = pV4Addr->sin_addr;
     char buf[BUF_SIZE];
-    long total_buffer_size = BUF_SIZE;
+    long total_buffer_size_for_write_into_file = BUF_SIZE;
+    long total_buffer_size_for_read_from_file = BUF_SIZE;
     long filled_up_buffer_size = 0;
     socklen_t addr_size;
     bool daemon_mode = false;
-    int read_buff_size = 0;
     char str[INET_ADDRSTRLEN];
+    char *newline_char_ptr;
+    long newline_char_index = 0;
+    long prev_newline_char_index = 0;
+    long end_of_file_index = 0;
 
     char *heap_buffer_for_write = NULL;
     char *heap_buffer_for_read = NULL;
     int return_status = 0;
 
     //check command line arguments
-     if (argc > 2)
+    if (argc > 2)
     {
         perror("Invalid arguments");
         return -1;
@@ -118,7 +127,7 @@ int main(int argc, char *argv[])
     else if (argc == 1)
     {
         daemon_mode = false;
-    }   
+    }
 
     else if (argc == 2)
     {
@@ -134,13 +143,13 @@ int main(int argc, char *argv[])
         switch (server_socket_state)
         {
         case STATE_OPENING_SOCKET:
-            // LOG_DBG("STATE_OPENING_SOCKET\n");
+            LOG_DBG("STATE_OPENING_SOCKET\n");
             sockfd_server = socket(PF_INET, SOCK_STREAM, 0);
             if (sockfd_server < 0)
             {
                 perror("Error opening a socket");
                 return_status = -1;
-                server_socket_state = EXIT;
+                server_socket_state = STATE_EXIT;
                 break;
             }
 
@@ -149,7 +158,7 @@ int main(int argc, char *argv[])
             {
                 perror("error in setsockopt");
                 return_status = -1;
-                server_socket_state = EXIT;
+                server_socket_state = STATE_EXIT;
                 break;
             }
 
@@ -162,13 +171,13 @@ int main(int argc, char *argv[])
 
         case STATE_BINDING:
             //bind socket server
-            //LOG_DBG("STATE_BINDING\n");
+            LOG_DBG("STATE_BINDING\n");
             status = bind(sockfd_server, (struct sockaddr *)&server_addr, sizeof(server_addr));
             if (status < 0)
             {
                 perror("Error binding");
                 return_status = -1;
-                server_socket_state = EXIT;
+                server_socket_state = STATE_EXIT;
                 break;
             }
             if (daemon_mode == true)
@@ -178,7 +187,7 @@ int main(int argc, char *argv[])
             break;
 
         case STATE_START_DAEMON:
-            // LOG_DBG("DAEMON\n");
+            LOG_DBG("DAEMON\n");
             signal(SIGCHLD, SIG_IGN);
             signal(SIGHUP, SIG_IGN);
             server_socket_state = STATE_LISTENING;
@@ -195,7 +204,7 @@ int main(int argc, char *argv[])
             {
                 perror("Error starting daemon");
                 return_status = -1;
-                server_socket_state = EXIT;
+                server_socket_state = STATE_EXIT;
                 break;
             }
 
@@ -203,7 +212,7 @@ int main(int argc, char *argv[])
             {
                 perror("Error starting daemon");
                 return_status = -1;
-                server_socket_state = EXIT;
+                server_socket_state = STATE_EXIT;
                 break;
             }
 
@@ -219,95 +228,92 @@ int main(int argc, char *argv[])
             break;
 
         case STATE_LISTENING:
-            // LOG_DBG("STATE_LISTENING\n");
+            LOG_DBG("STATE_LISTENING\n");
             //listen for connections
             status = listen(sockfd_server, 5);
             if (status < 0)
             {
                 perror("Listening failed");
                 return_status = -1;
-                server_socket_state = EXIT;
+                server_socket_state = STATE_EXIT;
                 break;
             }
             server_socket_state = STATE_OPENING_FILE;
             break;
 
         case STATE_OPENING_FILE:
-        //    LOG_DBG("STATE_OPENING_FILE\n");
-           fd = open("/var/tmp/aesdsocketdata", O_CREAT | O_RDWR | O_TRUNC, 0644);
+            LOG_DBG("STATE_OPENING_FILE\n");
+            fd = open("/var/tmp/aesdsocketdata", O_CREAT | O_RDWR | O_TRUNC, 0644);
             if (fd == -1)
             {
                 perror("error creating file");
                 return_status = -1;
-                server_socket_state = EXIT;
+                server_socket_state = STATE_EXIT;
                 break;
             }
             server_socket_state = STATE_ACCEPTING;
             break;
 
         case STATE_ACCEPTING:
-            // LOG_DBG("STATE_ACCEPTING\n");
+            LOG_DBG("STATE_ACCEPTING\n");
             addr_size = sizeof(new_addr);
-		
+
             //accept socket connections
-            sockfd_client = accept(sockfd_server, (struct sockaddr*)&new_addr, &addr_size);
-            if(sockfd_client < 0) 
+            sockfd_client = accept(sockfd_server, (struct sockaddr *)&new_addr, &addr_size);
+            if (sockfd_client < 0)
             {
-                LOG_ERROR("error accepting connection");
-                server_socket_state = EXIT;
+                LOG_ERROR("error accepting connection\n");
+                server_socket_state = STATE_EXIT;
                 break;
             }
 
             inet_ntop(AF_INET, &client_addr, str, INET_ADDRSTRLEN);
-            
-		    syslog(LOG_INFO, "Accepted connection from %s", str);
+            syslog(LOG_INFO, "Accepted connection from %s", str);
 
-
-            nwrite=0, nreceived=0, nsent=0, nread=0;
+            nwrite = 0, nreceived = 0, nsent = 0, nread = 0;
             heap_buffer_for_write = NULL;
             heap_buffer_for_read = NULL;
             filled_up_buffer_size = 0;
-            total_buffer_size = BUF_SIZE;
+            total_buffer_size_for_write_into_file = BUF_SIZE;
 
-            heap_buffer_for_write = (char *)malloc(sizeof(char)*BUF_SIZE);
-            if(heap_buffer_for_write == NULL) 
+            heap_buffer_for_write = (char *)malloc(sizeof(char) * BUF_SIZE);
+            if (heap_buffer_for_write == NULL)
             {
                 LOG_ERROR("could not malloc");
-                server_socket_state = EXIT;
+                server_socket_state = STATE_EXIT;
                 break;
             }
             server_socket_state = STATE_RECEIVE_FROM_CLIENT;
             break;
 
         case STATE_RECEIVE_FROM_CLIENT:
-            // LOG_DBG("STATE_RECEIVE_FROM_CLIENT\n");
-            do {
-			nreceived = recv(sockfd_client, buf, sizeof(buf), 0);
-			//LOG_DBG("Received %d\n", nreceived);
-			if(!nreceived || (strchr(buf, '\n')!=NULL))
-				server_socket_state = STATE_WRITING_FILE;
+            LOG_DBG("STATE_RECEIVE_FROM_CLIENT");
+            do
+            {
+                nreceived = recv(sockfd_client, buf, sizeof(buf), 0);
+                LOG_DBG("\tReceived %ld\n", nreceived);
+                if (!nreceived || (strchr(buf, '\n') != NULL))
+                    server_socket_state = STATE_WRITING_FILE;
 
-			if((total_buffer_size - filled_up_buffer_size) < nreceived) {
-
-				total_buffer_size += nreceived;
-				heap_buffer_for_write = (char *)realloc(heap_buffer_for_write, sizeof(char)*total_buffer_size);
-			}
-			
-			memcpy(&heap_buffer_for_write[filled_up_buffer_size], buf, nreceived);
-			filled_up_buffer_size += nreceived;
-			
-		    } while(server_socket_state == STATE_RECEIVE_FROM_CLIENT);
+                if ((total_buffer_size_for_write_into_file - filled_up_buffer_size) < nreceived)
+                {
+                    total_buffer_size_for_write_into_file += nreceived;
+                    heap_buffer_for_write = (char *)realloc(heap_buffer_for_write, sizeof(char) * total_buffer_size_for_write_into_file);
+                }
+                memcpy(&heap_buffer_for_write[filled_up_buffer_size], buf, nreceived);
+                filled_up_buffer_size += nreceived;
+            } while (server_socket_state == STATE_RECEIVE_FROM_CLIENT);
 
             break;
 
         case STATE_WRITING_FILE:
-            // LOG_DBG("STATE_WRITING_FILE\n");
+            LOG_DBG("STATE_WRITING_FILE");
             nwrite = write(fd, heap_buffer_for_write, filled_up_buffer_size);
-            //LOG_DBG("Written %d\n", nwrite);
-		    if(nwrite < 0) 
+            LOG_DBG("\tWritten %ld\n", nwrite);
+            if (nwrite < 0)
             {
                 perror("write failed");
-                server_socket_state = EXIT;
+                server_socket_state = STATE_EXIT;
                 break;
             }
             lseek(fd, 0, SEEK_SET);
@@ -315,50 +321,97 @@ int main(int argc, char *argv[])
             break;
 
         case STATE_READING_FILE:
-            //  LOG_DBG("STATE_READING_FILE\n");
-            read_buff_size += filled_up_buffer_size;
-            heap_buffer_for_read = (char *)malloc(sizeof(char)*read_buff_size);
-            
-            if(heap_buffer_for_read == NULL) 
+            LOG_DBG("STATE_READING_FILE");
+            heap_buffer_for_read = (char *)malloc(sizeof(char) * BUF_SIZE);
+            if (heap_buffer_for_read == NULL)
             {
                 perror("error malloc");
-                server_socket_state = EXIT;
+                server_socket_state = STATE_EXIT;
                 break;
             }
-                
-            //store contents os output file in heap_buffer_for_read
-            nread = read(fd, heap_buffer_for_read, read_buff_size);
-            //LOG_DBG("Read %d\n", nread);
-            if(nread != read_buff_size) 
+            LOG_DBG("------heap_buffer_for_read=%p\n", heap_buffer_for_read);
+            total_buffer_size_for_read_from_file = BUF_SIZE;
+            lseek(fd, 0, SEEK_SET);
+            do
             {
-                perror("error reading file");
-                server_socket_state = EXIT;
-                break;
-            }
-            server_socket_state = STATE_SEND_TO_CLIENT;
+                nread = read(fd, heap_buffer_for_read, total_buffer_size_for_read_from_file);
+                LOG_DBG("\tno_of_bytes read expected: %ld, actual:  %ld\t", total_buffer_size_for_read_from_file, nread);
+                if (nread == 0)
+                {
+                    LOG_DBG("No of chars to be sent over socket : %ld\n", (newline_char_index - prev_newline_char_index));
+                    // LOG_DBG("-----------newline_ptr = %p\theap_buffer_for_read = %p\tprev_heap_buffer_for_read = %p\n", newline_char_ptr, heap_buffer_for_read, prev_heap_buffer_for_read);
+                    server_socket_state = STATE_EXIT;
+                }
+
+                newline_char_ptr = memchr((heap_buffer_for_read + newline_char_index), '\n', (total_buffer_size_for_read_from_file - newline_char_index));
+
+                if ((newline_char_ptr != NULL))
+                {
+                    prev_newline_char_index = newline_char_index;
+                    newline_char_index = newline_char_ptr - heap_buffer_for_read + 1;
+                    server_socket_state = STATE_SEND_TO_CLIENT;
+                    LOG_DBG("-----------Found newline character = %ld\n", newline_char_index);
+                }
+                else
+                {
+                    total_buffer_size_for_read_from_file += BUF_SIZE;
+
+                    heap_buffer_for_read = (char *)realloc(heap_buffer_for_read, sizeof(char) * total_buffer_size_for_read_from_file);
+                    if (heap_buffer_for_read == NULL)
+                    {
+                        LOG_DBG("realloc failed");
+                        server_socket_state = STATE_EXIT;
+                        break;
+                    }
+
+                    LOG_DBG("-Reallocating size for %ld\ns", total_buffer_size_for_read_from_file);
+                    nread = total_buffer_size_for_read_from_file;
+                    lseek(fd, 0, SEEK_SET);
+                }
+
+            } while (server_socket_state == STATE_READING_FILE);
+
             break;
 
         case STATE_SEND_TO_CLIENT:
-            // LOG_DBG("STATE_SEND_TO_CLIENT\n");
-            nsent = send(sockfd_client, heap_buffer_for_read, read_buff_size, 0);
-            if(nsent != read_buff_size) 
+            LOG_DBG("STATE_SEND_TO_CLIENT\n");
+            nsent = send(sockfd_client, heap_buffer_for_read + prev_newline_char_index, (newline_char_index - prev_newline_char_index), 0);
+            if (nsent != (newline_char_index - prev_newline_char_index))
             {
                 perror("error sending");
-                server_socket_state = EXIT;
+                server_socket_state = STATE_EXIT;
                 break;
-		    }
+            }
+            LOG_DBG("\tindex of file: %ld\t", newline_char_index);
+            end_of_file_index = lseek(fd, 0, SEEK_END);
+            LOG_DBG("\tend of file: %ld\t", end_of_file_index);
+
+            if (end_of_file_index == newline_char_index)
+            {
+                server_socket_state = STATE_ACCEPTING;
+                newline_char_index = 0;
+                LOG_DBG("Reached end of read_file\n");
+                free(heap_buffer_for_write);
+            }
+            else
+            {
+                server_socket_state = STATE_READING_FILE;
+                nread = 0;
+            }
+
             free(heap_buffer_for_read);
-	        free(heap_buffer_for_write);
-            close(sockfd_client);
-            syslog(LOG_INFO, "Closed connection from %s", str);
-            server_socket_state = STATE_ACCEPTING;
+
+            if (signal_exit_request == true)
+                server_socket_state = STATE_EXIT;
+
             break;
 
-        case EXIT:
-            // LOG_DBG("EXIT\n");
+        case STATE_EXIT:
+            LOG_DBG("STATE_EXIT\n");
             close(fd);
             close(sockfd_server);
-            status = remove(FILE);
+            closelog();
+            if (remove(FILE) == -1)
             {
                 perror("Could not delete file");
             }
