@@ -388,6 +388,8 @@ int main(int argc, char *argv[])
 
             if (end_of_file_index == newline_char_index)
             {
+                close(sockfd_client);
+                syslog(LOG_INFO, "Closed connection from %s", str);
                 server_socket_state = STATE_ACCEPTING;
                 newline_char_index = 0;
                 LOG_DBG("Reached end of read_file\n");
@@ -410,6 +412,8 @@ int main(int argc, char *argv[])
             LOG_DBG("STATE_EXIT\n");
             close(fd);
             close(sockfd_server);
+            syslog(LOG_INFO, "Closed connection from %s", str);
+            close(sockfd_client);
             closelog();
             if (remove(FILE) == -1)
             {
