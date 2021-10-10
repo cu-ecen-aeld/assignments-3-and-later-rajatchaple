@@ -5,11 +5,11 @@ CC=$(CROSS_COMPILE)gcc
 CDEFS= 
 CFLAGS= -O0 -g $(INCLUDE_DIRS) $(CDEFS) -Wall -Werror
 LDFLAGS= 
-LIBS= 
+LIBS= -lpthread -lrt	
 
 PRODUCT=aesdsocket
 
-HFILES=
+HFILES= queue.h
 CFILES= aesdsocket.c
 
 SRCS= ${HFILES} ${CFILES}
