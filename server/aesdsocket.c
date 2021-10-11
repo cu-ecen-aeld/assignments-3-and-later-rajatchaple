@@ -502,6 +502,7 @@ int main(int argc, char *argv[])
                 server_socket_state = STATE_EXIT;
                 break;
             }
+            daemon_mode =false;
             if (daemon_mode == true)
                 server_socket_state = STATE_START_DAEMON;
             else
