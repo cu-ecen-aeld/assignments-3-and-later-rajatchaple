@@ -126,6 +126,21 @@ void signal_handler(int signo)
 
 
 /******************************************************************************
+ * timer add
+ * ****************************************************************************/
+static inline void timespec_add( struct timespec *result,
+                        const struct timespec *ts_1, const struct timespec *ts_2)
+{
+    result->tv_sec = ts_1->tv_sec + ts_2->tv_sec;
+    result->tv_nsec = ts_1->tv_nsec + ts_2->tv_nsec;
+    if( result->tv_nsec > 1000000000L ) {
+        result->tv_nsec -= 1000000000L;
+        result->tv_sec ++;
+    }
+}
+
+
+/******************************************************************************
  * timer handler
  * ****************************************************************************/
 static void timer_thread(union sigval sigval)
@@ -135,14 +150,15 @@ static void timer_thread(union sigval sigval)
     char time_format[100];
     time_t time_stamp;
     int nwrite;
+    size_t time_size;
 
     time(&time_stamp);
     time_info = localtime(&time_stamp);
     memcpy(time_format, "",100);
-    strftime(time_format,100,"timestamp:%a, %d %b %Y %T %z\n", time_info);
+    time_size = strftime(time_format,100,"timestamp:%a, %d %b %Y %T %z\n", time_info);
 
     MUTEX_LOCK
-    nwrite = write(*fd, time_format, sizeof(time_format));
+    nwrite = write(*fd, time_format, time_size);
     LOG_DBG("\tTimestamp %s written to file\n", time_format);
     if (nwrite < 0)
     {
@@ -158,16 +174,10 @@ static void timer_thread(union sigval sigval)
  * *********************************************************************************************/
 static void timer_init(int* fd, timer_t *timerid)
 {
-    //timer_t timerid;
     struct sigevent sev;
     struct itimerspec itimerspec;
-    // long long freq_nanosecs;
-    //typedef struct thread_data thread_data_t;
-    //thread_data_t td;
-    // sigset_t mask;
-    // struct sigaction sa;
     int clock_id = CLOCK_MONOTONIC;
-    struct timespec start_time;
+    struct timespec start_time = {0};
     int status;
 
 
@@ -185,37 +195,26 @@ static void timer_init(int* fd, timer_t *timerid)
         return;
     }
     
-    status = clock_gettime(clock_id,&start_time);
+    status = clock_gettime(clock_id, &start_time);
     if(status != 0)
     {
-        LOG_ERROR("Error getting clock\n");
+        perror("Error getting clock\n");
         return;
     }
-    
-    // struct timespec sleep_timer;
-    // sleep_timer.tv_sec = 10;
-    // sleep_timer.tv_nsec = 0;
 
-    
-    itimerspec.it_value.tv_sec = start_time.tv_sec + 10;
-    itimerspec.it_value.tv_nsec = 0;
     itimerspec.it_interval.tv_sec = 10;
-    itimerspec.it_interval.tv_nsec = itimerspec.it_value.tv_nsec;
+    itimerspec.it_interval.tv_nsec = 1000000;//itimerspec.it_value.tv_nsec;
 
      
-    // status = timespec_add(&itimerspec.it_value,start_time,&itimerspec.it_interval);
-    // if(status != 0)
-    // {
-    //     LOG_ERROR("Error getting clock\n");
-    //     return;
-    // }
-
+    timespec_add(&itimerspec.it_value,&start_time,&itimerspec.it_interval);
+    
     status = timer_settime(*timerid, TIMER_ABSTIME, &itimerspec, NULL );
     if(status != 0)
     {
         LOG_ERROR("Error getting clock\n");
         return;
     }
+    
 }
 
 
@@ -590,7 +589,7 @@ int main(int argc, char *argv[])
             if(timer_started == false)
             {
                 timer_init(&file_descriptor, &timerid);
-                timer_started = true;
+                timer_started = true;                
             }
 
             //accept socket connections
