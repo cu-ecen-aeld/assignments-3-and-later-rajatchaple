@@ -70,7 +70,7 @@ enum socket_states
     STATE_SEND_TO_CLIENT,
     STATE_CLOSING,
     STATE_EXIT
-} server_socket_state = STATE_OPENING_SOCKET;
+} server_socket_state = STATE_INIT;
 
 int sockfd_server;
 
@@ -449,6 +449,7 @@ int main(int argc, char *argv[])
     signal(SIGINT, signal_handler);
 
     pthread_mutex_init(&mutex_socket_communication, NULL);
+    server_socket_state = STATE_INIT;
 
     
 
@@ -462,6 +463,7 @@ int main(int argc, char *argv[])
             {
                 perror("Could not delete file");
             }
+            server_socket_state = STATE_OPENING_SOCKET;
             break;
 
         case STATE_OPENING_SOCKET:
