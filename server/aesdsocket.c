@@ -398,7 +398,8 @@ void *socket_communication(void *threadp)
             thread_params->socket_thread_completion_flag = true;
             LOG_DBG("STATE_EXIT\n");
             LOG_DBG("Exiting thread\n");
-            pthread_exit(NULL);
+            return NULL;
+            //pthread_exit(NULL);
             break;
 
         default:
