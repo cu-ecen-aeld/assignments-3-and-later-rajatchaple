@@ -502,7 +502,6 @@ int main(int argc, char *argv[])
                 server_socket_state = STATE_EXIT;
                 break;
             }
-            daemon_mode =false;
             if (daemon_mode == true)
                 server_socket_state = STATE_START_DAEMON;
             else
@@ -587,10 +586,13 @@ int main(int argc, char *argv[])
             LOG_DBG("STATE_ACCEPTING\n");
             addr_size = sizeof(client_addr);
 
-            if(timer_started == false)
+            if((daemon_mode == false) || (pid == 0))
             {
-                timer_init(&file_descriptor, &timerid);
-                timer_started = true;                
+                if(timer_started == false)
+                {
+                    timer_init(&file_descriptor, &timerid);
+                    timer_started = true;                
+                }
             }
 
             //accept socket connections
