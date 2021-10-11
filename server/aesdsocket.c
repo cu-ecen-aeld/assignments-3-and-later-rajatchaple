@@ -427,7 +427,7 @@ int main(int argc, char *argv[])
     bool timer_started = false;
     int i = 0;
 
-
+    LOG_DBG("Starting socket server...\n");
     //check command line arguments
     if (argc > 2)
     {
@@ -502,7 +502,7 @@ int main(int argc, char *argv[])
                 server_socket_state = STATE_EXIT;
                 break;
             }
-            daemon_mode = false;
+            //daemon_mode = false;
             if (daemon_mode == true)
                 server_socket_state = STATE_START_DAEMON;
             else
