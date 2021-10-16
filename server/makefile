@@ -1,15 +1,21 @@
 INCLUDE_DIRS = 
 LIB_DIRS = 
+ifeq ($(CC),)
 CC=$(CROSS_COMPILE)gcc
-
+endif
 CDEFS= 
+ifeq ($(CFLAGS),)
 CFLAGS= -O0 -g $(INCLUDE_DIRS) $(CDEFS) -Wall -Werror
-LDFLAGS= 
+endif
 LIBS= 
+
+ifeq ($(LDFLAGS),)
+LDFLAGS= -lpthread -lrt	
+endif
 
 PRODUCT=aesdsocket
 
-HFILES=
+HFILES= queue.h
 CFILES= aesdsocket.c
 
 SRCS= ${HFILES} ${CFILES}
@@ -24,7 +30,7 @@ clean:
 	-rm -f ${PRODUCT} ${GARBAGE}
 
 aesdsocket:	aesdsocket.o
-	$(CC) $(LDFLAGS) $(CFLAGS) -o $@ aesdsocket.o $(LIBS)
+	$(CC)  $(CFLAGS) -o $@ aesdsocket.o $(LDFLAGS)  $(LIBS)
    
 
 depend:
