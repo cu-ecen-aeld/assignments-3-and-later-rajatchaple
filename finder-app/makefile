@@ -15,18 +15,17 @@ CFILES= writer.c
 SRCS= ${HFILES} ${CFILES}
 OBJS= ${CFILES:.c=.o}
 
-.DEFAULT_GOAL := all
+all:	${PRODUCT}
 
-all: ${PRODUCT}
-
+clean:
+	-rm -f *.o *.NEW *~ *.d
+	-rm -f ${PRODUCT} ${GARBAGE}
 
 writer:	writer.o
 	$(CC) $(LDFLAGS) $(CFLAGS) -o $@ writer.o $(LIBS)
    
 
+depend:
+
 .c.o:
 	$(CC) -MD $(CFLAGS) -c $<
-
-cleans:
-	-rm -f *.o *.NEW *~ *.d
-	-rm -f ${PRODUCT} ${GARBAGE}
