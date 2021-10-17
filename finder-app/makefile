@@ -27,6 +27,6 @@ writer:	writer.o
 .c.o:
 	$(CC) -MD $(CFLAGS) -c $<
 
-clean:
+cleans:
 	-rm -f *.o *.NEW *~ *.d
 	-rm -f ${PRODUCT} ${GARBAGE}
