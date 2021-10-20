@@ -12,9 +12,23 @@
 #include <linux/string.h>
 #else
 #include <string.h>
+#include <stdlib.h>
+
+#ifdef SYSLOG
+#define LOG_DBG(...) syslog(LOG_DEBUG, __VA_ARGS__)
+#define LOG_ERROR(...) syslog(LOG_ERR, __VA_ARGS__)
+#elif defined(NO_DEBUG)
+#define LOG_DBG(...)
+#define LOG_ERROR(...)
+#else
+#define LOG_DBG(...) printf(__VA_ARGS__)
+#define LOG_ERROR(...) printf(__VA_ARGS__)
+#endif
 #endif
 
 #include "aesd-circular-buffer.h"
+
+
 
 /**
  * @param buffer the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
@@ -29,9 +43,35 @@
 struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct aesd_circular_buffer *buffer,
 			size_t char_offset, size_t *entry_offset_byte_rtn )
 {
-    /**
-    * TODO: implement per description
-    */
+    struct aesd_buffer_entry* entryptr = NULL;
+    
+    uint8_t index;
+    long cumulative_size = -1;
+    long prev_cumulative_size = 0;
+
+    uint8_t entry_counter;
+
+
+    LOG_DBG("out %d in %d", buffer->out_offs, buffer->in_offs);
+    for(index=buffer->out_offs, entryptr=&((buffer)->entry[index]), entry_counter = 0; \
+			entry_counter < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; \
+			entry_counter++, index = (index + 1)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED , entryptr=&((buffer)->entry[index]))
+    {
+        //LOG_DBG("%s, size %ld, ", entryptr->buffptr, entryptr->size);
+
+        cumulative_size += (entryptr->size);
+        LOG_DBG("%d) %s", index, entryptr->buffptr);
+
+        if((char_offset <= cumulative_size))
+            {
+                // LOG_DBG("%s, size %ld, ", entryptr->buffptr, entryptr->size);
+                // LOG_DBG("(char_offset:%ld : cumulative_size%ld, prev_cumulative_size : %ld\n", (char_offset), cumulative_size, prev_cumulative_size);
+                
+                *entry_offset_byte_rtn = char_offset - prev_cumulative_size;
+                return entryptr;
+            }
+        prev_cumulative_size = cumulative_size + 1;
+    }
     return NULL;
 }
 
@@ -44,9 +84,26 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 */
 void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
-    /**
-    * TODO: implement per description 
-    */
+    struct aesd_buffer_entry* aesd_buff_entry = (struct aesd_buffer_entry*) malloc(sizeof(struct aesd_buffer_entry));
+    
+    memcpy(aesd_buff_entry, add_entry, sizeof(*add_entry));
+
+    if(buffer == NULL)
+    {
+        return;
+    }
+        
+    buffer->entry[buffer->in_offs].buffptr = aesd_buff_entry->buffptr;
+    buffer->entry[buffer->in_offs].size = aesd_buff_entry->size;
+    if(buffer->full == true)
+    {
+        buffer->out_offs = (buffer->out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+    }
+    
+    buffer->in_offs = (buffer->in_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+
+    buffer->full = (buffer->in_offs == buffer->out_offs);
+    LOG_DBG("out %d in %d full %d", buffer->out_offs, buffer->in_offs, buffer->full);
 }
 
 /**
@@ -56,3 +113,6 @@ void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer)
 {
     memset(buffer,0,sizeof(struct aesd_circular_buffer));
 }
+
+
+
