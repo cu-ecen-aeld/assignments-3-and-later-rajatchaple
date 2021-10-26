@@ -54,10 +54,20 @@ int aesd_trim(struct aesd_dev *dev)
 	struct aesd_buffer_entry *entry;
 	
 	PDEBUG("trim");
+
+
+	AESD_CIRCULAR_BUFFER_FOREACH(entry,dev->buffer,index) 
+	{
+  		PDEBUG("|X|%s ",entry->buffptr);
+ 	 }
+
 	AESD_CIRCULAR_BUFFER_FOREACH(entry, dev->buffer, index) 
 	{	PDEBUG("trim 1");
 		if(entry->buffptr != NULL)
-  			kfree(entry->buffptr);
+  			{
+				  kfree(entry->buffptr);
+				  entry->buffptr = NULL;
+			  }
 		PDEBUG("trim 2");
 
  	 }
@@ -85,7 +95,7 @@ PDEBUG("open 1");
 			return -ERESTARTSYS;
 			/** TODO: add function to clear all the buffers **/
 PDEBUG("open 2");
-		aesd_trim(dev); /* ignore errors */	
+		//aesd_trim(dev); /* ignore errors */	
 		mutex_unlock(&dev->lock);
 PDEBUG("open done");		
 	}
@@ -105,10 +115,10 @@ int aesd_release(struct inode *inode, struct file *filp)
 	if (mutex_lock_interruptible(&dev->lock))
 			return -ERESTARTSYS;
 	PDEBUG("release 2");	
-	aesd_trim(dev);
+	//aesd_trim(dev);
 	PDEBUG("release 3");
 	mutex_unlock(&dev->lock);
-
+PDEBUG("release done");
 	return 0;
 }
 
@@ -135,7 +145,7 @@ PDEBUG("read 1");
 	{
 		entryptr = aesd_circular_buffer_find_entry_offset_for_fpos(dev->buffer,
 			*f_pos, &entry_offset_byte_rtn);
-	
+		PDEBUG("|R|%s %lld",entryptr->buffptr, *f_pos);
 		retval += __copy_to_user(buf, &entryptr[entry_offset_byte_rtn], (entryptr->size - entry_offset_byte_rtn));
 PDEBUG("read 2");
 		*f_pos += entryptr->size - entry_offset_byte_rtn;
@@ -161,8 +171,8 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 {
 	ssize_t retval = -ENOMEM;
 	struct aesd_dev *dev = filp->private_data;
-	uint8_t index;
-	struct aesd_buffer_entry *entry;
+	//uint8_t index;
+	//struct aesd_buffer_entry *entry;
 
 	PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 	PDEBUG("writing %s",buf);
@@ -170,19 +180,23 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 		return -ERESTARTSYS;
 
 	PDEBUG("write 1");
-	dev->buffer->entry->buffptr = krealloc(dev->buffer->entry->buffptr, count * sizeof(char), GFP_KERNEL);
-	if(dev->buffer->entry->buffptr == NULL)
+	
+	dev->add_entry->buffptr = krealloc(dev->add_entry->buffptr, count * sizeof(char), GFP_KERNEL);
+	if(dev->add_entry->buffptr == NULL)
 		goto out;
 
 	PDEBUG("write 2");
 	//memcpy(dev->add_entry, buf);
-	retval = __copy_from_user ((char*)dev->buffer->entry->buffptr, buf, count);
-	dev->buffer->entry->size += count;
+	retval = __copy_from_user ((char*)dev->add_entry->buffptr, buf, count);
+	dev->add_entry->size += count;
 
 	PDEBUG("write 3");
-	if(memchr((char*)dev->buffer->entry->buffptr, '\n', dev->buffer->entry->size))
+	if(memchr((char*)dev->add_entry->buffptr, '\n', dev->add_entry->size))
 	{
-		aesd_circular_buffer_add_entry(dev->buffer, dev->buffer->entry);	//storing command into circular buffer
+		PDEBUG("writing--------- %s", dev->add_entry->buffptr);
+		aesd_circular_buffer_add_entry(dev->buffer, dev->add_entry);	//storing command into circular buffer
+		//kfree(dev->add_entry->buffptr);
+		dev->add_entry->buffptr = NULL;
 		retval = count;
 	}
 	
@@ -190,12 +204,12 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 out:
 	mutex_unlock(&dev->lock);
 
-PDEBUG("write 5");
+/*PDEBUG("write 5");
 	AESD_CIRCULAR_BUFFER_FOREACH(entry,dev->buffer,index) 
 	{
   		PDEBUG("|_|%s ",entry->buffptr);
- 	 }
-
+ 	 }*/
+PDEBUG("write done");
 	return retval;
 }
 
@@ -249,14 +263,16 @@ int aesd_init_module(void)
 		
 	//aesd_device.add_entry->buffptr = NULL;	
 	PDEBUG("init 1");
+	aesd_device.add_entry = (struct aesd_buffer_entry*)kmalloc(sizeof(struct aesd_buffer_entry ), GFP_KERNEL);
+	PDEBUG("init 2");
 	aesd_device.buffer = (struct aesd_circular_buffer*)kmalloc(sizeof(struct aesd_circular_buffer), GFP_KERNEL);
 	aesd_circular_buffer_init(aesd_device.buffer);
-PDEBUG("init 2");
+PDEBUG("init 3");
 	result = aesd_setup_cdev(&aesd_device);
 	if( result ) {
 		unregister_chrdev_region(dev, 1);
 	}
-PDEBUG("init 3");
+PDEBUG("init done");
 	return result;
 
 }
@@ -276,6 +292,7 @@ PDEBUG("Exiting module AESDCHAR");
 	 * TODO: cleanup AESD specific poritions here as necessary
 	 */
 	kfree(aesd_device.buffer);
+	aesd_device.buffer = NULL;
 	unregister_chrdev_region(devno, 1);
 }
 

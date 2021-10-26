@@ -84,7 +84,7 @@ const char *aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
     {
         return NULL;
     }
-        
+    PDEBUG("|-|writing %s ", add_entry->buffptr);    
     buffer->entry[buffer->in_offs].buffptr = add_entry->buffptr;
     buffer->entry[buffer->in_offs].size = add_entry->size;
     if(buffer->full == true)
