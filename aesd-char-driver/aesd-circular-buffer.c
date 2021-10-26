@@ -111,6 +111,7 @@ const char *aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
 */
 void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer)
 {
+     PDEBUG("inside cicrcular buffer init");
     memset(buffer,0,sizeof(struct aesd_circular_buffer));
 }
 
