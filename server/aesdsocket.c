@@ -34,10 +34,16 @@
 #include <sys/time.h>
 #include "queue.h"
 
-/***************Includes***************/
+/***************Defines***************/
+#define USE_AESD_CHAR_DEVICE 1
 #define BUF_SIZE 256
 #define PORT 9000
+
+#ifdef USE_AESD_CHAR_DEVICE
+#define FILE "/dev/aesdchar"
+#else
 #define FILE "/var/tmp/aesdsocketdata"
+#endif
 
 #define MUTEX_LOCK pthread_mutex_lock(&mutex_socket_communication);
 #define MUTEX_UNLOCK pthread_mutex_unlock(&mutex_socket_communication);
@@ -159,7 +165,7 @@ static void timer_thread(union sigval sigval)
 
     MUTEX_LOCK
     nwrite = write(*fd, time_format, time_size);
-    LOG_DBG("\tTimestamp %s written to file\n", time_format);
+    //LOG_DBG("\tTimestamp %s written to file\n", time_format);
     if (nwrite < 0)
     {
         perror("write failed");

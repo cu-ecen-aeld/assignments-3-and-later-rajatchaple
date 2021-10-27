@@ -378,6 +378,7 @@ PDEBUG("Exiting module AESDCHAR");
 	/**
 	 * TODO: cleanup AESD specific poritions here as necessary
 	 */
+	aesd_trim(&aesd_device);
 	kfree(aesd_device.buffer);
 	aesd_device.buffer = NULL;
 	unregister_chrdev_region(devno, 1);
