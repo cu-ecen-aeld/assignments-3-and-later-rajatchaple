@@ -106,30 +106,40 @@ PDEBUG("open done");
 int aesd_release(struct inode *inode, struct file *filp)
 {
 	struct aesd_dev *dev = filp->private_data; 
-	PDEBUG("release");
+	//PDEBUG("release");
 	/**
 	 * TODO: handle release
 	 */
 	//free buffers
-	PDEBUG("release 1");
+	// PDEBUG("release 1");
 	if (mutex_lock_interruptible(&dev->lock))
 			return -ERESTARTSYS;
-	PDEBUG("release 2");	
+	// PDEBUG("release 2");	
 	//aesd_trim(dev);
-	PDEBUG("release 3");
+	// PDEBUG("release 3");
 	mutex_unlock(&dev->lock);
-PDEBUG("release done");
+// PDEBUG("release done");
 	return 0;
 }
 
 ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
                 loff_t *f_pos)
 {
-	ssize_t retval = 0;
+	//ssize_t retval = 0;
+	size_t length_read = 0;
 	ssize_t entry_offset_byte_rtn = 0;
+	//size_t iEntry = 0;
 	struct aesd_dev *dev = filp->private_data; 
 	struct aesd_buffer_entry* entryptr = NULL;
+	
+	//char* read_buffer;
+	//size_t read_size_offset = 0;
+	int status;
 	PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
+
+	//return 0;
+	
+	
 	/*		  in
 	//abc def ghij klmnop 000 
 	      out
@@ -140,36 +150,86 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	
 	if (mutex_lock_interruptible(&dev->lock))
 		return -ERESTARTSYS;
-PDEBUG("read 1");
-	while(count > 0)
-	{
+//PDEBUG("read 1");
+	
 		entryptr = aesd_circular_buffer_find_entry_offset_for_fpos(dev->buffer,
 			*f_pos, &entry_offset_byte_rtn);
-		PDEBUG("|R|%s %lld",entryptr->buffptr, *f_pos);
-		retval += __copy_to_user(buf, &entryptr[entry_offset_byte_rtn], (entryptr->size - entry_offset_byte_rtn));
-PDEBUG("read 2");
-		*f_pos += entryptr->size - entry_offset_byte_rtn;
+		if(entryptr == NULL)
+			goto error;
+
+		if(entryptr->size < (count + entry_offset_byte_rtn))	
+		{
+			length_read = entryptr->size - entry_offset_byte_rtn;
+		}
+		else
+		{
+			length_read = count;
+		}
+
+		
+	
+	/*
+	while(count > 0)
+	{	
+		read_buffer = krealloc(read_buffer, (entryptr->size - entry_offset_byte_rtn) * sizeof(char), GFP_KERNEL);
+		strncat((read_buffer + read_size_offset), (char*)&entryptr[((entry_offset_byte_rtn++) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED)], (entryptr->size - entry_offset_byte_rtn));
+		
+		read_size_offset += (entryptr->size - entry_offset_byte_rtn);
+		entry_offset_byte_rtn = 0;
+		retval += (entryptr->size - entry_offset_byte_rtn);
+		
+		// retval += __copy_to_user(buf, &entryptr[entry_offset_byte_rtn], (entryptr->size - entry_offset_byte_rtn));
+//PDEBUG("read 2");
+		//  *f_pos += entryptr->size - entry_offset_byte_rtn;
+		//PDEBUG("read 3");
 		count -= entryptr->size - entry_offset_byte_rtn;
+		PDEBUG("|R|%s f_pos:%lld s:%ld o:%ld c:%ld",read_buffer, *f_pos, entryptr->size, entry_offset_byte_rtn, count);
+		//PDEBUG("read 4");
 		dev->buffer->out_offs  = (dev->buffer->out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
-		if(dev->buffer->entry[dev->buffer->out_offs].buffptr == NULL)	
+		//PDEBUG("read 5");
+		iEntry++;
+		if((dev->buffer->entry[dev->buffer->out_offs].buffptr == NULL)	|| iEntry == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED)
 			break;
 	}	
+	*/
+	status = _copy_to_user(buf, (entryptr->buffptr + entry_offset_byte_rtn), length_read);
+	if(status != 0)
+		return -EFAULT;
 
+	*f_pos += length_read;
+
+	PDEBUG("Read : e: %s  a: %s (%ld bytes)", (entryptr->buffptr + entry_offset_byte_rtn), buf, length_read);
+
+	//retval = *f_pos;
 
 	/**
 	 * TODO: handle read
 	 */
-PDEBUG("read 3");	
-	
+error:	
 	mutex_unlock(&dev->lock);
-	PDEBUG("read done");
-	return retval;
+	return length_read;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+/*******************************************************************************************
+ * AESD write
+ * 
+ *******************************************************************************************/
 ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
-	ssize_t retval = -ENOMEM;
+	char* buffer_from_user = (void*)buf;
+		ssize_t retval = -ENOMEM;
 	struct aesd_dev *dev = filp->private_data;
 	//uint8_t index;
 	//struct aesd_buffer_entry *entry;
@@ -179,28 +239,48 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 	if (mutex_lock_interruptible(&dev->lock))
 		return -ERESTARTSYS;
 
-	PDEBUG("write 1");
-	
-	dev->add_entry->buffptr = krealloc(dev->add_entry->buffptr, count * sizeof(char), GFP_KERNEL);
+	//PDEBUG("write 1");
+
+	// PDEBUG("Before: dev->add_entry->buffptr %p , string %s",dev->add_entry->buffptr, dev->add_entry->buffptr);
+	PDEBUG("Before: dev->add_entry->size %ld ", dev->add_entry->size);
+	dev->add_entry->buffptr = krealloc((dev->add_entry->buffptr), (count) * sizeof(char), GFP_KERNEL);
 	if(dev->add_entry->buffptr == NULL)
+	{	PDEBUG("Could not realloc");
 		goto out;
+	}
 
-	PDEBUG("write 2");
+	
+	//dev->add_entry->buffptr +=  dev->add_entry->size;
+	//PDEBUG("write 2");
 	//memcpy(dev->add_entry, buf);
-	retval = __copy_from_user ((char*)dev->add_entry->buffptr, buf, count);
-	dev->add_entry->size += count;
+	//buffer_from_user[count] = '\0';
+	retval = __copy_from_user (((char *)dev->add_entry->buffptr + dev->add_entry->size), buffer_from_user, count);
 
-	PDEBUG("write 3");
-	if(memchr((char*)dev->add_entry->buffptr, '\n', dev->add_entry->size))
+	PDEBUG("After: dev->add_entry->buffptr %p , string %s",dev->add_entry->buffptr, dev->add_entry->buffptr);
+	PDEBUG("Afterr: dev->add_entry->size %ld ", dev->add_entry->size);
+	//dev->add_entry->buffptr[count] = '\0';
+	dev->add_entry->size += count;
+	
+
+
+	//PDEBUG("write 3");
+	retval = dev->add_entry->size;
+	if(memchr((char*)dev->add_entry->buffptr, '\n', dev->add_entry->size) != NULL)
 	{
 		PDEBUG("writing--------- %s", dev->add_entry->buffptr);
+		PDEBUG("|Size of buffptr (main)|%ld ", dev->add_entry->size);
 		aesd_circular_buffer_add_entry(dev->buffer, dev->add_entry);	//storing command into circular buffer
-		//kfree(dev->add_entry->buffptr);
+		PDEBUG("|W|%s ", dev->add_entry->buffptr);
+		if (dev->add_entry->buffptr != NULL)
+		{
+			//kfree(dev->add_entry->buffptr);
+		}
 		dev->add_entry->buffptr = NULL;
-		retval = count;
+		dev->add_entry->size = 0;
+		//retval = count;
 	}
 	
-	PDEBUG("write 4");
+	//PDEBUG("write 4");
 out:
 	mutex_unlock(&dev->lock);
 
@@ -209,7 +289,7 @@ out:
 	{
   		PDEBUG("|_|%s ",entry->buffptr);
  	 }*/
-PDEBUG("write done");
+//PDEBUG("write done");
 	return retval;
 }
 
@@ -226,8 +306,11 @@ static int aesd_setup_cdev(struct aesd_dev *dev)
 	int err, devno = MKDEV(aesd_major, aesd_minor);
 	printk(KERN_WARNING "Inside aesd_setup_cdev");
 	cdev_init(&dev->cdev, &aesd_fops);
+	printk(KERN_WARNING "setup1");
 	dev->cdev.owner = THIS_MODULE;
+	printk(KERN_WARNING "setup2");
 	dev->cdev.ops = &aesd_fops;
+	printk(KERN_WARNING "setup3");
 	err = cdev_add (&dev->cdev, devno, 1);
 	if (err) {
 		printk(KERN_ERR "Error %d adding aesd cdev", err);
@@ -264,9 +347,13 @@ int aesd_init_module(void)
 	//aesd_device.add_entry->buffptr = NULL;	
 	PDEBUG("init 1");
 	aesd_device.add_entry = (struct aesd_buffer_entry*)kmalloc(sizeof(struct aesd_buffer_entry ), GFP_KERNEL);
+	
 	PDEBUG("init 2");
 	aesd_device.buffer = (struct aesd_circular_buffer*)kmalloc(sizeof(struct aesd_circular_buffer), GFP_KERNEL);
 	aesd_circular_buffer_init(aesd_device.buffer);
+
+	
+
 PDEBUG("init 3");
 	result = aesd_setup_cdev(&aesd_device);
 	if( result ) {

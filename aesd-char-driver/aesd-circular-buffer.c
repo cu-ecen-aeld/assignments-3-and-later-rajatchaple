@@ -76,6 +76,9 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 const char *aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
     char* return_val;
+    uint8_t index;
+     uint8_t entry_counter;
+     struct aesd_buffer_entry* entryptr = NULL;
     //struct aesd_buffer_entry* aesd_buff_entry = (struct aesd_buffer_entry*) malloc(sizeof(struct aesd_buffer_entry));
     
     //memcpy(aesd_buff_entry, add_entry, sizeof(*add_entry));
@@ -85,8 +88,11 @@ const char *aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
         return NULL;
     }
     PDEBUG("|-|writing %s ", add_entry->buffptr);    
-    buffer->entry[buffer->in_offs].buffptr = add_entry->buffptr;
-    buffer->entry[buffer->in_offs].size = add_entry->size;
+    PDEBUG("add entry ptr %p ", add_entry->buffptr);   
+     
+    buffer->entry[buffer->in_offs] = *add_entry;
+    PDEBUG("circ buff entry buffptr %p size %ld", buffer->entry[buffer->in_offs].buffptr, sizeof(buffer->entry[buffer->in_offs].buffptr));  
+    // memcpy((char*)buffer->entry[buffer->in_offs].buffptr, add_entry->buffptr, add_entry->size);
     if(buffer->full == true)
     {
         return_val = (char*)buffer->entry[buffer->out_offs].buffptr;
@@ -98,6 +104,17 @@ const char *aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
     }
     
     buffer->in_offs = (buffer->in_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+
+
+        PDEBUG("********************************************************************");
+
+    for(index=buffer->out_offs, entryptr=&((buffer)->entry[index]), entry_counter = 0; \
+			entry_counter < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; \
+			entry_counter++, index = (index + 1)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED , entryptr=&((buffer)->entry[index]))
+    {
+        PDEBUG("id <%d>, buf %s, size: %ld", index, (buffer)->entry[index].buffptr, entryptr->size);
+    }
+        PDEBUG("********************************************************************");
 
     
     buffer->full = (buffer->in_offs == buffer->out_offs);
@@ -114,6 +131,4 @@ void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer)
      PDEBUG("inside cicrcular buffer init");
     memset(buffer,0,sizeof(struct aesd_circular_buffer));
 }
-
-
 
