@@ -155,7 +155,7 @@ static void timer_thread(union sigval sigval)
     struct tm *time_info;
     char time_format[100];
     time_t time_stamp;
-    int nwrite;
+    //int nwrite;
     size_t time_size;
 
     time(&time_stamp);
@@ -164,12 +164,12 @@ static void timer_thread(union sigval sigval)
     time_size = strftime(time_format,100,"timestamp:%a, %d %b %Y %T %z\n", time_info);
 
     MUTEX_LOCK
-    nwrite = write(*fd, time_format, time_size);
-    //LOG_DBG("\tTimestamp %s written to file\n", time_format);
-    if (nwrite < 0)
-    {
-        perror("write failed");
-    }
+    //nwrite = write(*fd, time_format, time_size);
+    LOG_DBG("\t%d, %s, %ld\n", *fd, time_format, time_size);
+    // if (nwrite < 0)
+    // {
+    //     perror("write failed");
+    // }
     MUTEX_UNLOCK
 }
 
@@ -465,10 +465,12 @@ int main(int argc, char *argv[])
         {
 
         case STATE_INIT:
+            #ifndef USE_AESD_CHAR_DEVICE
             if (remove(FILE) == -1)
             {
                 perror("Could not delete file");
             }
+            #endif
             server_socket_state = STATE_OPENING_SOCKET;
             break;
 
@@ -575,7 +577,7 @@ int main(int argc, char *argv[])
         case STATE_OPENING_FILE:
 
             LOG_DBG("STATE_OPENING_FILE\n");
-            file_descriptor = open("/var/tmp/aesdsocketdata", O_CREAT | O_RDWR | O_TRUNC, 0644);
+            file_descriptor = open(FILE, O_CREAT | O_RDWR | O_TRUNC, 0644);
             if (file_descriptor == -1)
             {
                 perror("error creating file");
@@ -676,11 +678,12 @@ int main(int argc, char *argv[])
             close(fd);
             
             
-
+            #ifndef USE_AESD_CHAR_DEVICE
             if (remove(FILE) == -1)
             {
                 perror("Could not delete file");
             }
+            #endif
             if(pthread_mutex_destroy(&mutex_socket_communication) != 0)
                 perror("mutex destroy");
             close(sockfd_server);
