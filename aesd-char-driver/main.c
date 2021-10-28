@@ -129,11 +129,11 @@ loff_t aesd_llseek(struct file *filp, loff_t off, int whence)
     struct aesd_dev *dev = filp->private_data;
     loff_t newpos;
 
-	PDEBUG("Invoking lseek");
+	PDEBUG("Invoking lseek");	
     switch(whence) {
       case 0: /* SEEK_SET */
         //newpos = off;
-		newpos = dev->buffer->out_offs;
+		newpos = dev->buffer->out_offs + off;
         break;
 
       case 1: /* SEEK_CUR */
@@ -275,12 +275,12 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 
 	// PDEBUG("Before: dev->add_entry->buffptr %p , string %s",dev->add_entry->buffptr, dev->add_entry->buffptr);
 	PDEBUG("Before: dev->add_entry->size %ld ", dev->add_entry->size);
-	dev->add_entry->buffptr = krealloc((dev->add_entry->buffptr), (count + 1) * sizeof(char), GFP_KERNEL);
+	dev->add_entry->buffptr = krealloc((dev->add_entry->buffptr), (count) * sizeof(char), GFP_KERNEL);
 	if(dev->add_entry->buffptr == NULL)
 	{	PDEBUG("Could not realloc");
 		goto out;
 	}	
-
+	//dev->add_entry->buffptr[count] = '\0';
 	
 	//dev->add_entry->buffptr +=  dev->add_entry->size;
 	//PDEBUG("write 2");

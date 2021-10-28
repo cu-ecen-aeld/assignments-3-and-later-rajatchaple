@@ -106,7 +106,7 @@ struct slist_data_s
 
 int return_status = 0;
 pthread_mutex_t mutex_socket_communication;
-
+long total_number_of_bytes_written = 0;
 
 
 /******************************************************************************
@@ -283,13 +283,14 @@ void *socket_communication(void *threadp)
             
             MUTEX_LOCK
             nwrite = write(thread_params->fd, heap_buffer_for_write, filled_up_buffer_size);
+            total_number_of_bytes_written += nwrite;
             if (nwrite < 0)
             {
                 perror("write failed");
                 server_socket_state = STATE_EXIT;
                 break;
             }
-            lseek(thread_params->fd, 0, SEEK_SET);
+            //lseek(thread_params->fd, 0, SEEK_SET);
 
             MUTEX_UNLOCK
             
@@ -370,7 +371,7 @@ void *socket_communication(void *threadp)
             // LOG_DBG("\tindex of file: %ld\t", newline_char_index);
 
             MUTEX_LOCK
-            end_of_file_index = lseek(thread_params->fd, 0, SEEK_END);
+            end_of_file_index = total_number_of_bytes_written;//lseek(thread_params->fd, 0, SEEK_END);
             MUTEX_UNLOCK
             
             // LOG_DBG("\tend of file: %ld\t", end_of_file_index);
