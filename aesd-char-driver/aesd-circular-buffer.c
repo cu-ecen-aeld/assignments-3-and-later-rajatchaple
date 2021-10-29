@@ -11,6 +11,7 @@
 #ifdef __KERNEL__
 #include <linux/string.h>
 #include <linux/printk.h>
+#include <linux/slab.h>
 #else
 #include <string.h>
 #include <stdlib.h>
@@ -138,3 +139,24 @@ void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer)
     memset(buffer,0,sizeof(struct aesd_circular_buffer));
 }
 
+void aesd_cicular_buffer_free(struct aesd_circular_buffer *buffer)
+{
+    uint8_t index;
+    struct aesd_buffer_entry *entry;
+
+    AESD_CIRCULAR_BUFFER_FOREACH(entry, buffer, index)
+    {
+
+        if (entry->buffptr != NULL)
+        {
+
+#ifdef __KERNEL__
+            kfree(entry->buffptr);
+
+#else
+            free((char *)entry->buffptr);
+
+#endif
+        }
+    }
+}
