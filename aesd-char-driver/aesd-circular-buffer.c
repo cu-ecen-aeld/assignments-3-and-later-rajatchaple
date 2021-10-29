@@ -87,6 +87,10 @@ const char *aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
     {
         return NULL;
     }
+        if(buffer->full == true)
+    {
+        return_val = (char*)buffer->entry[buffer->in_offs].buffptr;
+    }
     PDEBUG("|-|writing %s ", add_entry->buffptr);    
     PDEBUG("add entry ptr %p ", add_entry->buffptr);   
      
@@ -95,7 +99,6 @@ const char *aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
     // memcpy((char*)buffer->entry[buffer->in_offs].buffptr, add_entry->buffptr, add_entry->size);
     if(buffer->full == true)
     {
-        return_val = (char*)buffer->entry[buffer->out_offs].buffptr;
         buffer->out_offs = (buffer->out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
     }
     else
@@ -117,7 +120,10 @@ const char *aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, 
         PDEBUG("********************************************************************");
 
     
-    buffer->full = (buffer->in_offs == buffer->out_offs);
+    if( buffer->in_offs == buffer->out_offs)
+       buffer->full = true;
+       else
+       buffer->full = false;
     PDEBUG("out %d in %d full %d", buffer->out_offs, buffer->in_offs, buffer->full);
 
     return return_val;    
