@@ -124,36 +124,6 @@ int aesd_release(struct inode *inode, struct file *filp)
 }
 
 
-loff_t aesd_llseek(struct file *filp, loff_t off, int whence)
-{
-    struct aesd_dev *dev = filp->private_data;
-    loff_t newpos;
-
-	PDEBUG("Invoking lseek");	
-    switch(whence) {
-      case 0: /* SEEK_SET */
-        //newpos = off;
-		newpos = dev->buffer->out_offs + off;
-        break;
-
-      case 1: /* SEEK_CUR */
-        newpos = filp->f_pos + off;
-        break;
-
-      case 2: /* SEEK_END */
-        newpos = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED + off;
-        break;
-
-      default: /* can't happen */
-        return -EINVAL;
-    }
-    if (newpos < 0) return -EINVAL;
-    filp->f_pos = newpos;
-    return newpos;
-}
-
-
-
 ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
                 loff_t *f_pos)
 {
@@ -331,7 +301,6 @@ struct file_operations aesd_fops = {
 	.write =    aesd_write,
 	.open =     aesd_open,
 	.release =  aesd_release,
-	.llseek = aesd_llseek,
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)
