@@ -10,21 +10,13 @@
 
 #ifdef __KERNEL__
 #include <linux/string.h>
+#include <linux/printk.h>
+#include <linux/slab.h>
 #else
 #include <string.h>
 #include <stdlib.h>
+#endif
 
-#ifdef SYSLOG
-#define LOG_DBG(...) syslog(LOG_DEBUG, __VA_ARGS__)
-#define LOG_ERROR(...) syslog(LOG_ERR, __VA_ARGS__)
-#elif defined(NO_DEBUG)
-#define LOG_DBG(...)
-#define LOG_ERROR(...)
-#else
-#define LOG_DBG(...) printf(__VA_ARGS__)
-#define LOG_ERROR(...) printf(__VA_ARGS__)
-#endif
-#endif
 
 #include "aesd-circular-buffer.h"
 
@@ -52,20 +44,20 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     uint8_t entry_counter;
 
 
-    LOG_DBG("out %d in %d", buffer->out_offs, buffer->in_offs);
+    PDEBUG("out %d in %d", buffer->out_offs, buffer->in_offs);
     for(index=buffer->out_offs, entryptr=&((buffer)->entry[index]), entry_counter = 0; \
 			entry_counter < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; \
 			entry_counter++, index = (index + 1)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED , entryptr=&((buffer)->entry[index]))
     {
-        //LOG_DBG("%s, size %ld, ", entryptr->buffptr, entryptr->size);
+        //PDEBUG("%s, size %ld, ", entryptr->buffptr, entryptr->size);
 
         cumulative_size += (entryptr->size);
-        LOG_DBG("%d) %s", index, entryptr->buffptr);
+        PDEBUG("%d) %s", index, entryptr->buffptr);
 
         if((char_offset <= cumulative_size))
             {
-                // LOG_DBG("%s, size %ld, ", entryptr->buffptr, entryptr->size);
-                // LOG_DBG("(char_offset:%ld : cumulative_size%ld, prev_cumulative_size : %ld\n", (char_offset), cumulative_size, prev_cumulative_size);
+                // PDEBUG("%s, size %ld, ", entryptr->buffptr, entryptr->size);
+                // PDEBUG("(char_offset:%ld : cumulative_size%ld, prev_cumulative_size : %ld\n", (char_offset), cumulative_size, prev_cumulative_size);
                 
                 *entry_offset_byte_rtn = char_offset - prev_cumulative_size;
                 return entryptr;
@@ -82,28 +74,60 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 * Any necessary locking must be handled by the caller
 * Any memory referenced in @param add_entry must be allocated by and/or must have a lifetime managed by the caller.
 */
-void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
+const char *aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
-    struct aesd_buffer_entry* aesd_buff_entry = (struct aesd_buffer_entry*) malloc(sizeof(struct aesd_buffer_entry));
+    char* return_val;
+    uint8_t index;
+     uint8_t entry_counter;
+     struct aesd_buffer_entry* entryptr = NULL;
+    //struct aesd_buffer_entry* aesd_buff_entry = (struct aesd_buffer_entry*) malloc(sizeof(struct aesd_buffer_entry));
     
-    memcpy(aesd_buff_entry, add_entry, sizeof(*add_entry));
+    //memcpy(aesd_buff_entry, add_entry, sizeof(*add_entry));
 
     if(buffer == NULL)
     {
-        return;
+        return NULL;
     }
-        
-    buffer->entry[buffer->in_offs].buffptr = aesd_buff_entry->buffptr;
-    buffer->entry[buffer->in_offs].size = aesd_buff_entry->size;
+        if(buffer->full == true)
+    {
+        return_val = (char*)buffer->entry[buffer->in_offs].buffptr;
+    }
+    PDEBUG("|-|writing %s ", add_entry->buffptr);    
+    PDEBUG("add entry ptr %p ", add_entry->buffptr);   
+     
+    buffer->entry[buffer->in_offs] = *add_entry;
+    PDEBUG("circ buff entry buffptr %p size %ld", buffer->entry[buffer->in_offs].buffptr, sizeof(buffer->entry[buffer->in_offs].buffptr));  
+    // memcpy((char*)buffer->entry[buffer->in_offs].buffptr, add_entry->buffptr, add_entry->size);
     if(buffer->full == true)
     {
         buffer->out_offs = (buffer->out_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
     }
+    else
+    {
+        return_val = NULL;
+    }
     
     buffer->in_offs = (buffer->in_offs + 1) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
 
-    buffer->full = (buffer->in_offs == buffer->out_offs);
-    LOG_DBG("out %d in %d full %d", buffer->out_offs, buffer->in_offs, buffer->full);
+
+        PDEBUG("********************************************************************");
+
+    for(index=buffer->out_offs, entryptr=&((buffer)->entry[index]), entry_counter = 0; \
+			entry_counter < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; \
+			entry_counter++, index = (index + 1)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED , entryptr=&((buffer)->entry[index]))
+    {
+        PDEBUG("id <%d>, buf %s, size: %ld", index, (buffer)->entry[index].buffptr, entryptr->size);
+    }
+        PDEBUG("********************************************************************");
+
+    
+    if( buffer->in_offs == buffer->out_offs)
+       buffer->full = true;
+       else
+       buffer->full = false;
+    PDEBUG("out %d in %d full %d", buffer->out_offs, buffer->in_offs, buffer->full);
+
+    return return_val;    
 }
 
 /**
@@ -111,8 +135,28 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
 */
 void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer)
 {
+     PDEBUG("inside cicrcular buffer init");
     memset(buffer,0,sizeof(struct aesd_circular_buffer));
 }
 
+void aesd_cicular_buffer_free(struct aesd_circular_buffer *buffer)
+{
+    uint8_t index;
+    struct aesd_buffer_entry *entry;
 
+    AESD_CIRCULAR_BUFFER_FOREACH(entry, buffer, index)
+    {
 
+        if (entry->buffptr != NULL)
+        {
+
+#ifdef __KERNEL__
+            kfree(entry->buffptr);
+
+#else
+            free((char *)entry->buffptr);
+
+#endif
+        }
+    }
+}
